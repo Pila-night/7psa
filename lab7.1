@@ -1,0 +1,24 @@
+import socketserver
+
+students = {
+    "Иванов": "Иван",
+    "Петров": "Петр",
+    "Сидоров": "Сидор",
+    "Николаев": "Николай",
+    "Кузнецова": "Наташа"
+}
+
+class MyTCPHandler(socketserver.StreamRequestHandler):
+    def handle(self):
+        self.wfile.write(b"Введите вашу фамилию: ")
+        self.data = self.rfile.readline().strip().decode('utf-8')
+        if self.data in students:
+            greeting = f"Привет, {students[self.data]}!\n"
+            self.wfile.write(greeting.encode('utf-8'))
+        else:
+            error_message = "Ошибка: Фамилия не найдена.\n"
+            self.wfile.write(error_message.encode('utf-8'))
+
+with socketserver.TCPServer(('', 7777), MyTCPHandler) as server:
+    print("Сервер запущен на порту 7777...")
+    server.serve_forever()
