@@ -1,48 +1,52 @@
 import requests
 from bs4 import BeautifulSoup
 import os
-from urllib.parse import urljoin
+from urllib.parse import urlparse, urljoin
 
-def download_images_from_page(url, visited):
-    if url in visited:
-        return 
+def get_full_url(base_url, relative_url):
+    parsed_base_url = urlparse(base_url)
+    if relative_url.startswith('http://') or relative_url.startswith('https://'):
+        return relative_url
+    if relative_url.startswith('/'):
+        return f"{parsed_base_url.scheme}://{parsed_base_url.netloc}{relative_url}"
+    return urljoin(base_url, relative_url)
 
-    visited.add(url)  
-    print(f"Загружаем страницу: {url}")
+def save_images_from_url(url, save_directory, visited_urls):
+    if url in visited_urls:
+        return
+    visited_urls.add(url)
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Проверка на ошибки HTTP
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        os.makedirs('images', exist_ok=True)
+    images = soup.find_all('img')
+    for image in images:
+        image_url = image['src']
+        full_image_url = get_full_url(url, image_url)  
+        
+        image_data = requests.get(full_image_url).content
+        image_name = full_image_url.split('/')[-1]
+        file_path = os.path.join(save_directory, image_name)
 
-        images = soup.find_all('img')
-        for img in images:
-            img_url = img.get('src')
-            if img_url:
-                img_url = urljoin(url, img_url)  
-                img_name = os.path.join('images', os.path.basename(img_url))
+        if not os.path.exists(file_path):
+            with open(file_path, 'wb') as f:
+                f.write(image_data)        
+            print(f"Загружено изображение: {image_name}")
+        else:
+            print(f"Изображение уже существует: {image_name}")
 
-                try:
-                    img_response = requests.get(img_url)
-                    img_response.raise_for_status()  # Проверка на ошибки HTTP при загрузке изображения
-                    
-                    with open(img_name, 'wb') as f:
-                        f.write(img_response.content)
-                    print(f"Сохранено: {img_name}")
-                except requests.exceptions.RequestException as e:
-                    print(f"Ошибка при загрузке изображения: {img_url} - {e}")
+    links = soup.find_all('a', href=True)
+    for link in links:
+        link_url = link['href']
+        full_link_url = get_full_url(url, link_url)  
+        save_images_from_url(full_link_url, save_directory, visited_urls)
 
-        links = soup.find_all('a', href=True)
-        for link in links:
-            link_url = link['href']
-            link_url = urljoin(url, link_url) 
-            download_images_from_page(link_url, visited) 
+URL = input("Введите URL страницы: ")
+save_directory = input("Введите путь к директории для сохранения изображений: ")
+if not os.path.exists(save_directory):
+    os.makedirs(save_directory)
 
-    except requests.exceptions.RequestException as e:
-        print(f"Ошибка при загрузке страницы: {e}")
+visited_urls = set()
+save_images_from_url(URL, save_directory, visited_urls)
 
-start_url = "https://best-stroi.ru/"
-visited_urls = set()  
-download_images_from_page(start_url, visited_urls)
+print("Изображения успешно загружены!")
